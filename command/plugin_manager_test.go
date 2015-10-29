@@ -14,6 +14,18 @@ import (
 
 const TestPluginProcessMagicCookie = "abcd"
 
+func TestPluginCalcMD5(t *testing.T) {
+	plugin := &Plugin{
+		Path: filepath.Join("./test-fixtures", "hello.txt"),
+	}
+	if err := plugin.CalcMD5(); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if plugin.MD5 != "09f7e02f1290be211da707a266f153b3" {
+		t.Fatalf("bad: %s", plugin.MD5)
+	}
+}
+
 func TestPluginLoad(t *testing.T) {
 	plugin := testPlugin(t, "mock")
 	if err := plugin.Load(); err != nil {

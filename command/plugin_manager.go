@@ -1,6 +1,8 @@
 package command
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,8 +44,16 @@ type Plugin struct {
 	// Path and Args are the method used to invocate this plugin.
 	// These are the only two values that need to be set manually. Once
 	// these are set, call Load to load the plugin.
-	Path string
-	Args []string
+	Path string   `json:"path"`
+	Args []string `json:"args"`
+
+	// MD5 is the expected MD5 of Path. This can be set using CalcMD5,
+	// and it will be verified on Load. If it isn't set, this does nothing.
+	//
+	// We use MD5 because we just want a fast, non-cryptographic hash.
+	// Something like Murmur would probably be better in the future but
+	// for now we stick to things built-in to the Go stdlib.
+	MD5 string `json:"md5"`
 
 	// The fields below are loaded as part of the Load() call and should
 	// not be set manually, but can be accessed after Load.
@@ -51,6 +61,24 @@ type Plugin struct {
 	AppMeta *app.Meta   `json:"-"`
 
 	used bool
+}
+
+// CalcMD5 calculates the MD5 hash of this plugin and saves it to MD5.
+func (p *Plugin) CalcMD5() error {
+	f, err := os.Open(p.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	hash := md5.New()
+	_, err = io.Copy(hash, f)
+	if err != nil {
+		return err
+	}
+
+	p.MD5 = hex.EncodeToString(hash.Sum(nil))
+	return nil
 }
 
 // Load loads the plugin specified by the Path and instantiates the
@@ -166,6 +194,32 @@ func (m *PluginManager) StoreUsed(path string) error {
 		if p.Used() {
 			plugins = append(plugins, p)
 		}
+	}
+
+	// Calculate the MD5 hash of all used plugins. We do this one per CPU.
+	var err error
+	var errLock sync.Mutex
+	var wg sync.WaitGroup
+	sema := semaphore.New(runtime.NumCPU())
+	for _, p := range plugins {
+		wg.Add(1)
+		go func(p *Plugin) {
+			defer wg.Done()
+
+			sema.Acquire()
+			defer sema.Release()
+
+			if err := p.CalcMD5(); err != nil {
+				errLock.Lock()
+				defer errLock.Unlock()
+				err = multierror.Append(err, fmt.Errorf(
+					"Error calculating MD5 of %s: %s", p.Path, err))
+			}
+		}(p)
+	}
+	wg.Wait()
+	if err != nil {
+		return err
 	}
 
 	// Write the used plugins to the given path as JSON
