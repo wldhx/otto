@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"github.com/hashicorp/otto/context"
+	"github.com/hashicorp/otto/plan"
 )
 
 // Foundation is the interface that must be implemented by each
@@ -15,12 +16,12 @@ type Foundation interface {
 	// this foundation.
 	Compile(*Context) (*CompileResult, error)
 
-	// Infra is called to build or destroy the infrastructure for this
-	// foundation. The "Action" field in the Context can be used to
-	// determine the desired action. This will be either "" (build)
-	// or "destroy". Foundations currently don't support any other
-	// actions.
-	Infra(*Context) error
+	// Plan is called to plan any changes that are necessary for this
+	// foundation. This method is expected to potentially make network
+	// calls, check for drift, and do whatever is necessary to create the
+	// plans. This method should not, however, modify infrastructure
+	// in any way.
+	Plan(*Context) ([]*plan.Plan, error)
 }
 
 // Context is the context for operations on a Foundation.

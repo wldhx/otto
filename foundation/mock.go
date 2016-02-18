@@ -1,5 +1,9 @@
 package foundation
 
+import (
+	"github.com/hashicorp/otto/plan"
+)
+
 // Mock is a mock implementation of the Foundation interface.
 type Mock struct {
 	CompileCalled  bool
@@ -7,9 +11,10 @@ type Mock struct {
 	CompileResult  *CompileResult
 	CompileErr     error
 
-	InfraCalled  bool
-	InfraContext *Context
-	InfraErr     error
+	PlanCalled  bool
+	PlanContext *Context
+	PlanResult  []*plan.Plan
+	PlanErr     error
 }
 
 func (m *Mock) Compile(ctx *Context) (*CompileResult, error) {
@@ -18,8 +23,8 @@ func (m *Mock) Compile(ctx *Context) (*CompileResult, error) {
 	return m.CompileResult, m.CompileErr
 }
 
-func (m *Mock) Infra(ctx *Context) error {
-	m.InfraCalled = true
-	m.InfraContext = ctx
-	return m.InfraErr
+func (m *Mock) Plan(ctx *Context) ([]*plan.Plan, error) {
+	m.PlanCalled = true
+	m.PlanContext = ctx
+	return m.PlanResult, m.PlanErr
 }
