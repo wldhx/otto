@@ -2,6 +2,7 @@ package hashicorp
 
 import (
 	"github.com/hashicorp/otto/foundation"
+	"github.com/hashicorp/otto/plan"
 )
 
 type Foundation struct{}
@@ -10,6 +11,6 @@ func (f *Foundation) Compile(*foundation.Context) (*foundation.CompileResult, er
 	return nil, nil
 }
 
-func (f *Foundation) Infra(*foundation.Context) error {
-	return nil
+func (f *Foundation) Plan(*foundation.Context) ([]*plan.Plan, error) {
+	return nil, nil
 }

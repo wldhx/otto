@@ -386,14 +386,41 @@ func (c *Core) Plan() (*Plan, error) {
 	}
 	defer maybeClose(infra)
 
+	// Get the foundation implementation
+	foundations, foundationCtxs, err := c.foundations()
+	if err != nil {
+		return nil, err
+	}
+	for _, ctx := range foundationCtxs {
+		ctx.InfraCreds = infraCtx.InfraCreds
+	}
+	for _, f := range foundations {
+		defer maybeClose(f)
+	}
+
+	// The final result
+	var plans []*plan.Plan
+
 	// Ask the infra to plan
 	p, err := infra.Plan(infraCtx)
 	if err != nil {
 		return nil, errwrap.Wrapf("Error planning infrastructure: {{err}}", err)
 	}
+	plans = append(plans, p...)
+
+	// Ask the foundations to plan
+	for i, f := range foundations {
+		ctx := foundationCtxs[i]
+		p, err := f.Plan(ctx)
+		if err != nil {
+			return nil, errwrap.Wrapf("Error planning foundation: {{err}}", err)
+		}
+
+		plans = append(plans, p...)
+	}
 
 	// Return the complete plan
-	return &Plan{Plans: p}, nil
+	return &Plan{Plans: plans}, nil
 }
 
 // Build builds the deployable artifact for the currently compiled
@@ -572,112 +599,6 @@ func (c *Core) Dev() error {
 		"[DEBUG] core: calling Dev for root app '%s'",
 		rootCtx.Appfile.Application.Name)
 	return rootApp.Dev(rootCtx)
-}
-
-// Infra manages the infrastructure for this Appfile.
-//
-// Infra supports subactions, which can be specified with action and args.
-// Infra recognizes two special actions: "" (blank string) and "destroy".
-// The former expects to create or update the complete infrastructure,
-// and the latter will destroy the infrastructure.
-func (c *Core) Infra(action string, args []string) error {
-	// Get the infra implementation for this
-	infra, infraCtx, err := c.infra()
-	if err != nil {
-		return err
-	}
-	if action == "" || action == "destroy" {
-		if err := c.infraCreds(infra, infraCtx); err != nil {
-			return err
-		}
-	}
-	defer maybeClose(infra)
-
-	// Set the action and action args
-	infraCtx.Action = action
-	infraCtx.ActionArgs = args
-
-	// If we need the foundations, then get them
-	var foundations []foundation.Foundation
-	var foundationCtxs []*foundation.Context
-	if action == "" || action == "destroy" {
-		foundations, foundationCtxs, err = c.foundations()
-		if err != nil {
-			return err
-		}
-	}
-	for _, f := range foundations {
-		defer maybeClose(f)
-	}
-
-	// If we're doing anything other than destroying, then
-	// run the execution now.
-	if action != "destroy" {
-		panic("TODO")
-		/*
-			if err := infra.Execute(infraCtx); err != nil {
-				return err
-			}
-		*/
-	}
-
-	// If we have any foundations, we now run their infra deployment.
-	// This should only ever execute if action is to deploy or destroy,
-	// since those are the only cases that we load foundations.
-	for i, f := range foundations {
-		ctx := foundationCtxs[i]
-		ctx.Action = action
-		ctx.ActionArgs = args
-		ctx.InfraCreds = infraCtx.InfraCreds
-
-		log.Printf(
-			"[INFO] infra action '%s' on foundation '%s'",
-			action, ctx.Tuple.Type)
-
-		switch action {
-		case "":
-			c.ui.Header(fmt.Sprintf(
-				"Building infrastructure for foundation: %s",
-				ctx.Tuple.Type))
-		case "destroy":
-			c.ui.Header(fmt.Sprintf(
-				"Destroying infrastructure for foundation: %s",
-				ctx.Tuple.Type))
-		}
-
-		if err := f.Infra(ctx); err != nil {
-			return err
-		}
-	}
-
-	// If the action is destroy, we run the infrastructure execution
-	// here. We mirror creation above since in the destruction case
-	// we need to first destroy all applications and foundations that
-	// are using this infra.
-	if action == "destroy" {
-		panic("DESTROY TODO")
-		/*
-			if err := infra.Execute(infraCtx); err != nil {
-				return err
-			}
-		*/
-	}
-
-	// Output the right thing
-	switch action {
-	case "":
-		infraCtx.Ui.Header("[green]Infrastructure successfully created!")
-		infraCtx.Ui.Message(
-			"[green]The infrastructure necessary to deploy this application\n" +
-				"is now available. You can now deploy using `otto deploy`.")
-	case "destroy":
-		infraCtx.Ui.Header("[green]Infrastructure successfully destroyed!")
-		infraCtx.Ui.Message(
-			"[green]The infrastructure necessary to run this application and\n" +
-				"all other applications in this project has been destroyed.")
-	}
-
-	return nil
 }
 
 // Status outputs to the UI the status of all the stages of this application.
