@@ -15,6 +15,7 @@ python_requirements_contains() {
 python_pip_apt() {
     _python_pip_packages=()
     _python_requirements_check psycopg2 "libpq-dev"
+    _python_requirements_check Pillow "libjpeg-dev"
 
     if [ -n "${_python_pip_packages-}" ]; then
         otto_output "Installing native pip package system dependencies..."
